@@ -21,6 +21,8 @@ if exist ".venv\Scripts\python.exe" (
   ".venv\Scripts\python.exe" --version
   ".venv\Scripts\python.exe" -m pip show pywin32
   ".venv\Scripts\python.exe" -m pip show openpyxl
+  ".venv\Scripts\python.exe" -m pip show Pillow
+  ".venv\Scripts\python.exe" -m pip show lxml
 ) else (
   echo NOT FOUND: .venv\Scripts\python.exe
 )
