@@ -16,6 +16,7 @@ from pair_analysis import read_snapshot, compare_snapshots, tracked_advice, book
 
 def create_package(before_path, after_path, tracked_path, package_path, progress, cancel_event, logger,
                    *, preview_writer, capture, bookmark_range, version, package_format):
+    run_started = time.monotonic()
     package_path = Path(package_path).resolve()
     validate_paths(before_path, after_path, tracked_path, package_path)
     timings = {}
@@ -71,6 +72,10 @@ def create_package(before_path, after_path, tracked_path, package_path, progress
         temp = Path(temporary)
         working_before, working_after = temp / "before_work.docx", temp / "after_work.docx"
         items = []
+        # Separate per-document budgets prevent one broken document disabling
+        # captures in the other. Multi-page/page-lookup skips don't use a budget.
+        capture_failures = {"before": 0, "after": 0}
+        capture_stats = {"attempted": 0, "succeeded": 0, "failed": 0, "circuit_skipped": 0}
         reader = word = before_doc = after_doc = None
         try:
             if pairs:
@@ -115,7 +120,23 @@ def create_package(before_path, after_path, tracked_path, package_path, progress
                                 image_path = temp / "images" / f"{index:04d}_{side}.png"
                                 if end != start:
                                     raise ValueError("여러 페이지에 걸친 블록: 잘린 이미지 방지를 위해 원문으로 대체")
-                                capture(doc, index, reader, image_path)
+                                if capture_failures[side] >= 3:
+                                    capture_stats["circuit_skipped"] += 1
+                                    raise ValueError("그림 추출 연속 3회 실패로 이 문서의 나머지 그림은 생략합니다.")
+                                capture_stats["attempted"] += 1
+                                try:
+                                    method = capture(doc, index, reader, image_path)
+                                except OperationCancelled:
+                                    raise
+                                except Exception:
+                                    capture_failures[side] += 1
+                                    capture_stats["failed"] += 1
+                                    if capture_failures[side] == 3:
+                                        warnings.append(f"{side}: 그림 추출 연속 3회 실패. 반복 대기를 막기 위해 나머지는 텍스트로 대체합니다.")
+                                    raise
+                                capture_failures[side] = 0
+                                capture_stats["succeeded"] += 1
+                                item[side+"_capture_method"] = method or "custom"
                                 item[side+"_image"] = str(image_path)
                                 item[side+"_status"] = "이미지"
                             except OperationCancelled:
@@ -156,7 +177,9 @@ def create_package(before_path, after_path, tracked_path, package_path, progress
                     "input_mode": "pair_with_tracked" if tracked_path else "pair", "document_name": Path(after_path).stem,
                     "sources": {side: {"name": snap.path.name, "sha256": digest(snap.content)} for side, snap in (("before", before), ("after", after))},
                     "scope_before": before.scope, "scope_after": after.scope, "warnings": warnings,
-                    "comparison_scope": "본문 블록(목차 이전/부록 이후 자동 제외). 머리말·꼬리말·각주·미주는 차이 경고만 제공.",
+                    "comparison_mode": "content_only",
+                    "capture_statistics": capture_stats,
+                    "comparison_scope": "본문 내용 중심(목차 이전/부록 이후 자동 제외). 문단/글자 서식·수준·자동번호·페이지 설정만의 차이는 제외. 머리말·꼬리말·각주·미주는 차이 경고만 제공.",
                     "tracked_advice": advice, "item_count": len(items), "items": stored_items, "timings_seconds": timings}
         if tracked_path:
             manifest["sources"]["tracked"] = {"name": Path(tracked_path).name, "sha256": digest(Path(tracked_path).read_bytes())}
@@ -182,4 +205,6 @@ def create_package(before_path, after_path, tracked_path, package_path, progress
         for name in ("변경내용_미리보기.xlsx", "변경전_전체.docx", "변경후_전체.docx"):
             shutil.copy2(temp/name, package_path.with_name(package_path.stem+"_"+name))
         report("분석 완료", 100, f"검토 블록 {len(items)}개 · 경고 {len(warnings)}개")
-        return {"count": len(items), "warnings": warnings, "timings_seconds": timings}
+        total_seconds = round(time.monotonic()-run_started, 3)
+        logger.info("전체 분석 소요시간: %.3f초", total_seconds)
+        return {"count": len(items), "warnings": warnings, "timings_seconds": timings, "total_seconds": total_seconds}

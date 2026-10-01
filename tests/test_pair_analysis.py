@@ -62,7 +62,7 @@ class PairTests(unittest.TestCase):
 
     def test_format_only_and_media_changes(self):
         a,b=self.snapshots(p('same'), '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>same</w:t></w:r></w:p>')
-        self.assertEqual(len(compare_snapshots(a,b)[0]),1)
+        self.assertEqual(len(compare_snapshots(a,b)[0]),0)
         body='<w:p xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:r><w:drawing r:embed="rId1"/></w:r></w:p>'
         rels='<Relationships><Relationship Id="rId1" Type="image" Target="media/image.png"/></Relationships>'
         a=read_snapshot(docx(self.root/'a.docx',body,{'word/_rels/document.xml.rels':rels,'word/media/image.png':b'old'}))
@@ -187,13 +187,12 @@ class PairTests(unittest.TestCase):
             self.assertEqual(item['image_status'],'텍스트 대체')
         self.assertEqual(events[-1]['stage'],'분석 완료')
 
-    def test_changed_styles_includes_unchanged_text_for_review(self):
+    def test_changed_styles_does_not_include_unchanged_text(self):
         styles=lambda bold:f'<w:styles xmlns:w="{W}"><w:style w:styleId="Normal"><w:rPr>{"<w:b/>" if bold else ""}</w:rPr></w:style></w:styles>'
         a=read_snapshot(docx(self.root/'a.docx',p('same'),{'word/styles.xml':styles(False)}))
         b=read_snapshot(docx(self.root/'b.docx',p('same'),{'word/styles.xml':styles(True)}))
         pairs,warnings=compare_snapshots(a,b)
-        self.assertEqual(len(pairs),1)
-        self.assertTrue(pairs[0]['needs_review'])
+        self.assertEqual(len(pairs),0)
         self.assertTrue(warnings)
 
     def test_toc_and_appendix_scope_preserved(self):

@@ -1,11 +1,11 @@
-# AT_GENERATOR · 변분기 Alpha 0.3
+# AT_GENERATOR · 변분기 Alpha 0.4
 
 변경 전·후 DOCX를 비교하여 Word에서 보이는 변경 영역을 Excel에 좌우로 배치합니다.
 변경이력 DOCX는 선택 입력입니다. PDF 변환이나 외부 AI 전송은 하지 않습니다.
 
 ## 설치와 실행
 
-1. 저장소의 **Code → Download ZIP**을 선택하고 새 폴더에 압축을 풉니다.
+1. 제공된 배포 ZIP을 새 폴더에 풉니다. GitHub에서 받는 경우 `codex/alpha-0.4` 브랜치를 선택한 뒤 **Code → Download ZIP**을 누릅니다.
 2. Windows에 Microsoft Word 데스크톱 버전과 Python 3.11 이상을 설치합니다.
 3. `INSTALL.bat`을 실행합니다. 필요한 Python 패키지는 인터넷으로 설치됩니다.
 4. `RUN.bat`을 실행합니다.
@@ -13,7 +13,17 @@
 6. 출력 `.bdsg` 경로를 정하고 **변경 분석 및 미리보기 생성**을 누릅니다.
 
 업데이트를 새 폴더에 받았다면 INSTALL.bat을 다시 실행합니다. 단순 재부팅 후에는 RUN.bat만 실행합니다.
-실행 중에는 이미지 캡처에 클립보드를 사용하므로 다른 복사 작업을 피해주세요.
+그림은 Word 범위의 EMF 데이터를 직접 받아 PNG로 변환합니다. 직접 추출 실패 시에만 클립보드로 한 번 대체하므로, 실행 중 다른 복사 작업은 피해주세요.
+
+## Alpha 0.4 개선 사항
+
+- 문단 스타일·수준·글자 서식·텍스트 run 분할만 달라진 블록은 제외합니다.
+- 빈 문단·공백/쪽 나누기만 있는 문단의 추가/삭제도 간격 변경으로 보아 제외합니다. 글자가 없더라도 그림·수식·필드가 있는 문단은 유지합니다.
+- 스타일/번호/테마/페이지 설정 파일이 달라도 본문 전체를 캡처하지 않습니다.
+- 글자·공백·줄바꿈·표 셀 구조/병합·그림 내용·링크·수식 등의 변경은 비교 대상으로 유지합니다.
+- 그림 직접 추출 실패 시 대체 경로를 사용하며, 전/후 문서 각각 연속 3회 실패하면 남은 그림 추출을 중단하고 원문 텍스트를 보존합니다. 개별 Word 호출 자체가 멈추는 현상에 대한 강제 시간 제한은 아닙니다.
+- `analysis.json`에 비교 정책, 그림 추출 방식 및 성공/실패/생략 통계를 기록합니다.
+- 실제 자료 시험 결과와 제한은 `VALIDATION.md`를 참고하십시오.
 
 ## 입력 원칙
 
@@ -49,8 +59,8 @@ JSON에는 변경 ID, 양쪽 원문, 양쪽 페이지, 블록 위치, 이미지 
 - 이전 본문 범위 규칙을 이어받아 감지된 목차 이전 및 부록 이후를 제외합니다. 감지 범위는 JSON에 기록됩니다.
 - 머리말·꼬리말·각주·미주 차이는 확인사항에 기록하며 본문 이미지 비교에는 포함하지 않습니다.
 - 문단 순서가 바뀌거나 문단이 분할/병합되면 문서 순서 기준으로 연결됩니다. 의미상 대응은 사람이 확인해야 합니다.
-- 스타일·번호·테마·구역 설정이 달라지면 영향을 놓치지 않도록 본문 전체를 검토 대상으로 포함할 수 있습니다.
-- XML 구조/서식 차이도 감지하므로 Word 화면에서는 같아 보이는 블록이 포함될 수 있습니다.
+- 내용 중심 비교입니다. 자동 문단번호·수준·스타일·페이지 설정만의 변경은 제외하므로 번호나 레이아웃 검토가 필요하면 원본도 확인해야 합니다.
+- 그림/개체 내부 XML은 보수적으로 비교하므로 크기·자르기 등 개체 변경도 포함될 수 있습니다. 모든 시각적 서식 차이를 제거하는 기능은 아닙니다.
 - 그림 연결 대상의 내용 변경을 검사합니다. 문서의 모든 가능한 개체/외부 링크 표시 변화를 보증하는 비교 엔진은 아닙니다.
 - **여러 페이지에 걸친 블록 및 캡처 실패는 텍스트로 대체**합니다. 상세 시트와 원본 Word를 확인합니다.
 - 이미지 크기 변경은 원래 가로세로 비율을 유지합니다. Excel 원문 열은 제어문자 정제 및 32,767자 제한을 적용하며 전체 원문은 JSON에 보존합니다.
@@ -79,26 +89,46 @@ python -m unittest discover -s tests -v
 
 `pair_runner.py`: 이미지 추출과 패키지 생성 순서
 
+`word_capture.py`: Word EMF 직접 추출 및 제한된 클립보드 대체
+
 `app.py`: Alpha 0.2에서 가져온 Word 자동화/범위 감지 내부 엔진. 실행 진입점은 RUN.bat 또는 analyzer.py입니다.
 
 자동시험은 임시 합성 문서를 사용합니다. 실제 Windows Word의 페이지 계산·클립보드 캡처는 자동시험에서 검증하지 않습니다.
 Windows에서 일반 문단, 중첩표, 여러 페이지 표, 삭제/추가, 재실행 및 취소를 확인한 후 업무에 적용하십시오.
-실제 처리시간 개선율은 아직 측정하지 않았습니다.
+`TEST.bat`으로 Word를 열지 않는 회귀시험을 실행합니다. 실제 Word 시험은 사용자 동의 후 별도로 진행하며, 이번 결과는 `VALIDATION.md`에 기록했습니다. 한 문서의 측정값이 모든 문서의 성능을 보증하지 않습니다.
 
 ## Git 작업이력
 
-이 저장소는 Alpha 0.2 소스 기준점과 Alpha 0.3 변경 커밋을 분리합니다.
-이후에는 기능별 브랜치와 커밋으로 작업합니다.
+배포 ZIP의 `UPLOAD_TO_GITHUB.bat`을 실행하면 다음 순서로 진행합니다.
+
+1. GitHub 저장소 주소를 확인합니다. 기본값은 기존 자료에 있던 `https://github.com/murry1239/AT_GENERATOR.git`이며 다른 주소로 바꿀 수 있습니다.
+2. 포함된 이력 bundle을 `.github-upload`에 복원합니다. Alpha 0.2/0.3 이력을 유지하며 `codex/alpha-0.4` 브랜치를 사용합니다.
+3. 지정한 소스·시험·설명 파일만 스테이징하고 변경 목록을 표시합니다. `.venv`, 업무 DOCX, 결과 Excel/패키지/그림, 로그는 복사하지 않습니다.
+4. 목록과 주소를 확인하고 `UPLOAD`을 입력하면 커밋 후 업로드합니다. GitHub 로그인과 저장소 쓰기 권한이 필요합니다.
+5. `main`을 덮어쓰거나 강제 push하지 않습니다. 원격 이력 충돌 시 중단하므로 오류 메시지를 확인하십시오.
+
+Git 작성자가 설정되지 않았으면 BAT에서 이름/이메일을 묻습니다. 이 업로드 사본에만 설정하며 전역 Git 설정은 바꾸지 않습니다. 이메일은 커밋 이력에 남으므로 GitHub noreply 이메일을 권장합니다. 직접 설정하려면 아래 예시의 이름/이메일을 본인 것으로 바꾸어 이 폴더에서 실행합니다.
+
+```powershell
+git -C .github-upload config user.name "본인 이름"
+git -C .github-upload config user.email "본인 이메일 또는 GitHub noreply 이메일"
+```
+
+실행 전 검토용으로 `powershell -NoProfile -File .\UPLOAD_TO_GITHUB.ps1 -PrepareOnly`를 사용하면 로컬 소스 스테이징만 하며 커밋/네트워크 접속/업로드는 하지 않습니다. `.github-upload`는 업로드용 사본입니다. 코드 수정은 그 밖의 Alpha 0.4 원본 소스에서 하십시오. GitHub에서 받은 소스에는 bundle이 없으므로 그 경우 일반 Git 명령으로 작업합니다.
 
 ```bash
 git clone https://github.com/murry1239/AT_GENERATOR.git
 cd AT_GENERATOR
-git switch -c feature/next-change
+git switch -c codex/next-change
 # 수정 및 시험 후, 코드 파일만 지정해서 커밋
 git add analyzer.py pair_analysis.py pair_runner.py
 git commit -m "fix: describe the change"
-git push -u origin feature/next-change
+git push -u origin codex/next-change
 ```
 
 공개 저장소에는 업무 문서, 분석 패키지, 이미지, 실행 로그 및 API 키를 올리지 않습니다.
 `.gitignore`에 해당 결과물과 로컬 환경을 제외했습니다.
+
+배포 ZIP 재생성: `.venv\Scripts\python.exe tools\build_release.py` (출력: `dist\Byeonbungi_Alpha_0.4.zip`).
+
+구현 참고: [Word Range.EnhMetaFileBits](https://learn.microsoft.com/en-us/office/vba/api/word.range.enhmetafilebits), [Pillow WMF/EMF 지원](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#wmf-emf).

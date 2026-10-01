@@ -12,3 +12,8 @@ outputs/
 *.zip
 .env
 .env.*
+.github-upload/
+*.bundle
+dist/
+tmp/
+test-results/

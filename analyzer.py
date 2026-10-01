@@ -32,7 +32,7 @@ from app import (
 )
 
 
-VERSION = "변분기 Alpha 0.3"
+VERSION = "변분기 Alpha 0.4"
 PACKAGE_EXTENSION = ".bdsg"
 PACKAGE_FORMAT = "byeondaesaenggi-analysis-v1"
 
@@ -85,46 +85,9 @@ def _bookmark_range(document, group_index: int, engine: WordEngine):
     return document.Range(min(start, end), max(start, end))
 
 
-def _capture_range_png(document, group_index: int, engine: WordEngine, output: Path) -> None:
-    """Capture a Word range as a PNG without inserting it into another table."""
-    from PIL import Image, ImageGrab
-
-    source_range = _bookmark_range(document, group_index, engine)
-    last_error: Exception | None = None
-    for attempt in range(1, 7):
-        try:
-            engine._check_cancelled()
-            # Empty old clipboard content so a previous successful capture can
-            # never be silently attached to the next change.
-            import win32clipboard
-            win32clipboard.OpenClipboard()
-            try:
-                win32clipboard.EmptyClipboard()
-            finally:
-                win32clipboard.CloseClipboard()
-            engine._retry_word_call(
-                f"표 이미지 클립보드 복사 {group_index}",
-                lambda: source_range.CopyAsPicture(),
-                attempts=4,
-            )
-            engine._wait_for_word_retry(0.25 + attempt * 0.10, True)
-            grabbed = ImageGrab.grabclipboard()
-            if isinstance(grabbed, Image.Image):
-                image = grabbed.convert("RGB")
-                # Limit pathological clipboard sizes while retaining legibility.
-                if image.width > 1800:
-                    height = max(1, round(image.height * 1800 / image.width))
-                    image = image.resize((1800, height), Image.Resampling.LANCZOS)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                image.save(output, "PNG", optimize=True)
-                return
-            last_error = RuntimeError("클립보드에서 그림을 읽지 못했습니다.")
-        except OperationCancelled:
-            raise
-        except Exception as exc:
-            last_error = exc
-        engine._wait_for_word_retry(min(1.5, attempt * 0.25), True)
-    raise RuntimeError(f"Word 범위를 그림으로 캡처하지 못했습니다: {last_error}")
+def _capture_range_png(document, group_index: int, engine: WordEngine, output: Path):
+    from word_capture import capture_range
+    return capture_range(_bookmark_range(document, group_index, engine), engine, output)
 
 
 def excel_text(value):
@@ -312,7 +275,7 @@ class SimpleTool:
         self.last_log_path: Path | None = None
         self.task_started_at = 0.0
         self.last_progress_at = 0.0
-        title = "변분기 - Alpha 0.3"
+        title = "변분기 - Alpha 0.4"
         root.title(title)
         root.geometry("900x540")
         root.minsize(800, 500)

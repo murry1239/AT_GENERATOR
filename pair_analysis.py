@@ -24,6 +24,58 @@ DOC = "word/document.xml"
 IGNORE_NODES = {"bookmarkStart", "bookmarkEnd", "proofErr", "lastRenderedPageBreak", "commentRangeStart", "commentRangeEnd", "commentReference"}
 
 
+def content_signature(node, rels):
+    """Ignore text formatting/run splits, but retain content and table structure.
+
+    Drawing/object XML stays conservative: changed media, crops, equations and
+    hyperlinks must not disappear just because their plain text is identical.
+    """
+    tokens = []
+
+    def emit(value):
+        if isinstance(value, str) and tokens and isinstance(tokens[-1], str):
+            tokens[-1] += value
+        elif value != "":
+            tokens.append(value)
+
+    def visit(element):
+        name = local(element.tag)
+        namespace = ET.QName(element).namespace
+        if namespace == W:
+            if name in IGNORE_NODES or name in {"pPr", "rPr", "tblPr", "tblGrid", "sectPr", "sdtPr", "sdtEndPr"}:
+                return
+            if name in {"tcPr", "trPr"}:
+                # Cell merge/span changes are structural, not decoration.
+                for child in element:
+                    if local(child.tag) in {"gridSpan", "vMerge", "hMerge", "gridBefore", "gridAfter"}:
+                        emit((child.tag, tuple(sorted(child.attrib.items()))))
+                return
+            if name in {"t", "delText"}:
+                emit(element.text or "")
+                return
+            if name in {"r", "sdt", "sdtContent", "smartTag"}:
+                for child in element:
+                    visit(child)
+                return
+        attrs = []
+        for key, value in element.attrib.items():
+            attr = ET.QName(key)
+            if attr.localname.startswith("rsid") or attr.localname in {"paraId", "textId"}:
+                continue
+            if attr.namespace == R:
+                value = repr(rels.get(value, ("unresolved", value)))
+            attrs.append((key, value))
+        emit(("start", element.tag, tuple(sorted(attrs))))
+        if element.text and element.text.strip():
+            emit(element.text)
+        for child in element:
+            visit(child)
+        emit(("end", element.tag))
+
+    visit(node)
+    return tuple(tokens)
+
+
 def local(tag):
     return ET.QName(tag).localname
 
@@ -107,21 +159,6 @@ def read_snapshot(path: Path, *, allow_revisions=False) -> Snapshot:
             resolved = posixpath.normpath(posixpath.join("word", target)) if not target.startswith("/") else target.lstrip("/")
             rels[rel.get("Id")] = (rel.get("Type"), target if rel.get("TargetMode") == "External" else digest(data[resolved]) if resolved in data else resolved)
 
-    def signature(node):
-        name = local(node.tag)
-        if ET.QName(node).namespace == W and name in IGNORE_NODES:
-            return None
-        attrs = []
-        for key, value in node.attrib.items():
-            attr = ET.QName(key)
-            if attr.localname.startswith("rsid") or attr.localname in {"paraId", "textId"}:
-                continue
-            if attr.namespace == R:
-                value = repr(rels.get(value, ("unresolved", value)))
-            attrs.append((key, value))
-        return (node.tag, tuple(sorted(attrs)), node.text if name in {"t", "delText", "instrText"} else None,
-                tuple(s for c in node for s in [signature(c)] if s is not None))
-
     headings = _heading_style_ids(styles)
     section = "본문"
     blocks = []
@@ -144,12 +181,21 @@ def read_snapshot(path: Path, *, allow_revisions=False) -> Snapshot:
         if name == "p":
             section = _paragraph_heading(node, value, headings) or section
         kind = "table" if name == "tbl" or node.find(".//w:tbl", NS) is not None else "paragraph"
-        blocks.append(Block(index, node, value, signature(node), section, kind))
+        signature = content_signature(node, rels)
+        # Empty paragraphs only alter spacing. An image/equation/field without
+        # plain text still has content tokens and must remain in the comparison.
+        spacing_tags = {f"{{{W}}}{tag}" for tag in ("p", "tab", "br", "cr")}
+        spacing_only = all(not token.strip() if isinstance(token, str) else
+                           token[0] in {"start", "end"} and token[1] in spacing_tags
+                           for token in signature)
+        if name == "p" and spacing_only:
+            continue
+        blocks.append(Block(index, node, value, signature, section, kind))
     return Snapshot(path, raw_bytes, data, root, blocks, vars(scope), warnings)
 
 
 def compare_snapshots(before: Snapshot, after: Snapshot):
-    """Conservative block diff. Repeated content uses autojunk=False."""
+    """Content-first block diff. Repeated content uses autojunk=False."""
     warnings = before.warnings + after.warnings
     dependencies = ["word/styles.xml", "word/numbering.xml", "word/theme/theme1.xml", "word/fontTable.xml"]
     changed_dependencies = [name for name in dependencies if before.data.get(name) != after.data.get(name)]
@@ -158,7 +204,7 @@ def compare_snapshots(before: Snapshot, after: Snapshot):
     if [ET.tostring(n) for n in before_sect] != [ET.tostring(n) for n in after_sect]:
         changed_dependencies.append("구역/페이지 설정")
     if changed_dependencies:
-        warnings.append("스타일·번호·테마·페이지 설정 차이: 영향 누락을 피하기 위해 본문 전체를 검토 대상으로 포함합니다.")
+        warnings.append("스타일·번호·테마·페이지 설정 차이가 있습니다. 내용 중심 비교이므로 서식만 다른 본문은 제외했습니다. 자동 문단번호/수준·레이아웃 변화는 원본에서 확인하십시오.")
     extra = sorted(n for n in set(before.data) | set(after.data)
                    if n.startswith(("word/header", "word/footer", "word/footnotes", "word/endnotes"))
                    and before.data.get(n) != after.data.get(n))
@@ -169,7 +215,7 @@ def compare_snapshots(before: Snapshot, after: Snapshot):
     matcher = SequenceMatcher(None, [b.signature for b in before.blocks], [b.signature for b in after.blocks], autojunk=False)
     pairs = []
     for tag, a1, a2, b1, b2 in matcher.get_opcodes():
-        if tag == "equal" and not changed_dependencies:
+        if tag == "equal":
             continue
         # One row per block keeps captures bounded. Replacement blocks are
         # paired in document order; no semantic one-to-one equivalence claimed.
@@ -178,10 +224,10 @@ def compare_snapshots(before: Snapshot, after: Snapshot):
             new = after.blocks[b1+offset] if b1+offset < b2 else None
             kind = "insert" if old is None else "delete" if new is None else "modify"
             pairs.append({"before": old, "after": new, "change_type": kind,
-                          "needs_review": bool(changed_dependencies) or (max(a2-a1,b2-b1) > 1 and tag == "replace"),
-                          "match_method": "document_order", "format_review": bool(changed_dependencies)})
+                          "needs_review": max(a2-a1,b2-b1) > 1 and tag == "replace",
+                          "match_method": "content_document_order", "format_review": False})
     if any(x["needs_review"] for x in pairs):
-        warnings.append("문단 재배치·분할·병합 또는 서식 영향 검토가 필요합니다. 전후 블록은 문서 순서대로 대응시켰습니다.")
+        warnings.append("문단 재배치·분할·병합 검토가 필요합니다. 전후 블록은 문서 순서대로 대응시켰습니다.")
     return pairs, warnings
 
 
