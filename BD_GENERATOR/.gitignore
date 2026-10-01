@@ -1,0 +1,13 @@
+.venv/
+.github-upload/
+__pycache__/
+*.pyc
+dist/
+qa/
+*.bdsg
+*.docx
+*.xlsx
+*.png
+*.log
+*_검토.json
+*.bundle
