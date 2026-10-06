@@ -1,41 +1,47 @@
-# AT_GENERATOR · Alpha 1.0
+# AT_GENERATOR · Alpha 1.1
 
 변분기와 변대생기를 두 단계로 사용하는 Windows용 변경대비표 프로그램입니다.
 
-[**통합 배포 ZIP 다운로드**](https://github.com/murry1239/AT_GENERATOR/raw/refs/heads/main/AT_GENERATOR_Alpha_1.0.zip)
+[**통합 배포 ZIP 다운로드**](https://github.com/murry1239/AT_GENERATOR/raw/refs/heads/main/AT_GENERATOR_Alpha_1.1.zip)
 
 압축을 풀면 다음 두 폴더가 나옵니다.
 
 ```text
-변분기_Alpha_1.0/
-변대생기_Alpha_1.0/
+변분기_Alpha_1.1/
+변대생기_Alpha_1.1/
 ```
 
 | 프로그램 | 입력 | 결과 |
 |---|---|---|
-| [변분기 Alpha 1.0](변분기_Alpha_1.0/README.md) | 변경 전·후 DOCX, 선택 변경이력 DOCX | .bdsg 분석 패키지, 미리보기 XLSX |
-| [변대생기 Alpha 1.0](변대생기_Alpha_1.0/README.md) | 변분기의 .bdsg | 편집 가능한 Word 변경대비표 |
+| [변분기 Alpha 1.1](변분기_Alpha_1.1/README.md) | 변경 전·후 DOCX, 선택 변경이력 DOCX | .bdsg 분석 패키지, 미리보기 XLSX |
+| [변대생기 Alpha 1.1](변대생기_Alpha_1.1/README.md) | 변분기의 .bdsg | 편집 가능한 Word 변경대비표 |
 
 Windows와 Python 3.11 이상이 필요합니다. 변분기의 페이지 계산·이미지 캡처에는 데스크톱 Microsoft Word가 필요합니다.
 
 각 폴더에서 처음 한 번 `INSTALL.bat`을 실행한 다음 `RUN.bat`을 실행합니다. 종료나 재부팅 후에는 `RUN.bat`만 실행합니다. 새 버전 폴더는 별도로 설치합니다.
 
-변분기는 목차를 제외한 문서 앞부분의 표·문단과 본문을 비교하며, 별첨·부록 시작 이후는 제외합니다. 변대생기는 분석 결과를 A4 가로 5열 대비표로 만들고 변경 사유는 공란으로 둡니다. 기존 변분기 0.4·0.5 패키지도 읽을 수 있지만, 0.4 패키지에 없던 앞부분 변경을 포함하려면 전후 원문을 다시 분석해야 합니다.
+변분기는 목차를 제외한 문서 앞부분의 표·문단과 본문을 비교하며, 실제 별첨·부록 시작 이후는 제외합니다. Alpha 1.1에서는 앞부분 첨부자료 목록을 별첨 시작으로 오인하여 본문 분석이 빠지던 문제를 수정했습니다. 제공된 검증 문서에서 앞부분 4개와 본문 209개, 총 213개 변경을 확인했습니다.
+
+변대생기는 분석 결과를 A4 가로 5열 대비표로 만들고 변경 사유는 공란으로 둡니다. 새 1.1 패키지와 기존 변분기 0.4·0.5·1.0 패키지를 읽습니다. 이전 분석에서 본문이 빠진 경우 원래 변경 전·후 DOCX를 변분기 1.1로 다시 분석해야 합니다. 기존 .bdsg를 다시 여는 것만으로 누락된 항목이 복구되지는 않습니다. 변대생기 1.1은 범위 정보에서 이 문제를 확인하면 재분석 안내를 표시합니다.
+
+변대생기 1.1의 **전후 매칭 수정**에서 잘못 연결된 원문을 분리·재연결하고, 여러 블록을 한 행에 연결할 수 있습니다. 수정한 대응 관계와 행 순서·Section·page·포함/제외 정보는 **검토 저장**으로 별도 JSON에 저장합니다. 원본 .bdsg는 보존하고 최종 DOCX에 검토 내용을 반영합니다. Excel 미리보기를 편집한 내용은 자동 반영되지 않습니다.
 
 상세 사용법·제한·검증 기록은 각 폴더의 README.md와 VALIDATION.md에 있습니다. 배포에는 프로그램 소스와 설치·실행 BAT가 포함됩니다.
 
 통합 ZIP 재생성:
 
 ```powershell
-cd 변분기_Alpha_1.0
+cd 변분기_Alpha_1.1
 .venv\Scripts\python.exe tools\build_suite_release.py
 ```
 
-두 폴더를 나란히 둔 상태에서 어느 폴더의 `UPLOAD_TO_GITHUB.bat`을 실행해도 두 프로그램과 통합 ZIP을 함께 업로드합니다. 수동 업로드 스크립트는 `codex/alpha-1.0` 브랜치를 사용합니다.
+두 폴더를 나란히 둔 상태에서 어느 폴더의 `UPLOAD_TO_GITHUB.bat`을 실행해도 두 프로그램과 통합 ZIP을 함께 업로드합니다. 수동 업로드 스크립트는 `codex/alpha-1.1` 브랜치를 사용합니다.
+
+이전 [Alpha 1.0 통합 ZIP](https://github.com/murry1239/AT_GENERATOR/raw/refs/heads/main/AT_GENERATOR_Alpha_1.0.zip)과 두 프로그램 폴더도 보존합니다.
 
 ## 이전 Alpha 0.3 문서 보관
 
-아래 내용은 기존 저장소 루트의 Alpha 0.3 사용법입니다. 현재 배포는 위 두 Alpha 1.0 폴더를 사용하십시오.
+아래 내용은 기존 저장소 루트의 Alpha 0.3 사용법입니다. 현재 배포는 위 두 Alpha 1.1 폴더를 사용하십시오.
 
 # AT_GENERATOR · 변분기 Alpha 0.3
 
